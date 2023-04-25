@@ -1203,7 +1203,6 @@ export class JsonSchemaGenerator {
         pairedSymbol?: ts.Symbol,
         forceNotRef: boolean = false
     ): Definition {
-        console.log(typ.flags);
         const definition: Definition = {}; // real definition
 
         // Ignore any number of Readonly and Mutable type wrappings, since they only add and remove readonly modifiers on fields and JSON Schema is not concerned with mutability
