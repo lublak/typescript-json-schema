@@ -183,7 +183,7 @@ function extend(target: any, ..._: any[]): any {
 }
 
 function unique(arr: string[]): string[] {
-    const temp = {};
+    const temp:Record<string, boolean> = {};
     for (const e of arr) {
         temp[e] = true;
     }
@@ -286,7 +286,7 @@ function resolveTupleType(propertyType: ts.Type): ts.TupleTypeNode | null {
     return propertyType as any;
 }
 
-const simpleTypesAllowedProperties = {
+const simpleTypesAllowedProperties:Record<string, boolean> = {
     type: true,
     description: true,
 };
@@ -330,11 +330,11 @@ function makeNullable(def: Definition): Definition {
         if (union) {
             union.push({ type: "null" });
         } else {
-            const subdef = {};
+            const subdef:Record<string, any> = {};
             for (var k in def) {
                 if (def.hasOwnProperty(k)) {
-                    subdef[k] = def[k];
-                    delete def[k];
+                    subdef[k] = (def as any)[k];
+                    delete (def as any)[k];
                 }
             }
             def.anyOf = [subdef, { type: "null" }];
@@ -442,7 +442,7 @@ const annotationKeywords: { [k in keyof typeof validationKeywords]?: true } = {
     $ref: true,
 };
 
-const subDefinitions = {
+const subDefinitions:Record<string, boolean> = {
     items: true,
     additionalProperties: true,
     contains: true,
@@ -542,7 +542,7 @@ export class JsonSchemaGenerator {
     /**
      * Parse the comments of a symbol into the definition and other annotations.
      */
-    private parseCommentsIntoDefinition(symbol: ts.Symbol, definition: Definition, otherAnnotations: {}): void {
+    private parseCommentsIntoDefinition(symbol: ts.Symbol, definition: Definition, otherAnnotations: Record<string, boolean>): void {
         if (!symbol) {
             return;
         }
@@ -605,7 +605,7 @@ export class JsonSchemaGenerator {
                 if (match) {
                     const k = match[1];
                     const v = match[2];
-                    definition[name] = { ...definition[name], [k]: v ? parseValue(symbol, k, v) : true };
+                    (definition[name as keyof Definition] as any) = { ...definition[name as keyof Definition] as any, [k]: v ? parseValue(symbol, k, v) : true };
                     return;
                 }
             }
@@ -614,15 +614,15 @@ export class JsonSchemaGenerator {
             if (name.includes(".")) {
                 const parts = name.split(".");
                 if (parts.length === 2 && subDefinitions[parts[0]]) {
-                    definition[parts[0]] = {
-                        ...definition[parts[0]],
+                    (definition[parts[0] as keyof Definition] as any) = {
+                        ...(definition[parts[0] as keyof Definition] as any),
                         [parts[1]]: text ? parseValue(symbol, name, text) : true,
                     };
                 }
             }
 
-            if (validationKeywords[name] || this.userValidationKeywords[name]) {
-                definition[name] = text === undefined ? "" : parseValue(symbol, name, text);
+            if (validationKeywords[name as keyof typeof validationKeywords] || this.userValidationKeywords[name]) {
+                (definition[name as keyof Definition] as any) = text === undefined ? "" : parseValue(symbol, name, text);
             } else {
                 // special annotations
                 otherAnnotations[doc.name] = true;
@@ -762,7 +762,7 @@ export class JsonSchemaGenerator {
         if (valDecl?.initializer) {
             let initial = valDecl.initializer;
 
-            while (ts.isTypeAssertion(initial)) {
+            while (ts.isTypeAssertionExpression(initial)) {
                 initial = initial.expression;
             }
 
@@ -803,7 +803,7 @@ export class JsonSchemaGenerator {
         const members: ts.NodeArray<ts.EnumMember> =
             node.kind === ts.SyntaxKind.EnumDeclaration
                 ? (node as ts.EnumDeclaration).members
-                : ts.createNodeArray([node as ts.EnumMember]);
+                : ts.factory.createNodeArray([node as ts.EnumMember]);
         var enumValues: (number | boolean | string | null)[] = [];
         const enumTypes: string[] = [];
 
@@ -953,11 +953,11 @@ export class JsonSchemaGenerator {
         if (schemas.length === 1) {
             for (const k in schemas[0]) {
                 if (schemas[0].hasOwnProperty(k)) {
-                    definition[k] = schemas[0][k];
+                    (definition[k as keyof Definition] as any) = schemas[0][k as keyof Definition] as any;
                 }
             }
         } else {
-            definition[unionModifier] = schemas;
+            (definition[unionModifier as keyof Definition] as any) = schemas;
         }
         return definition;
     }
@@ -997,7 +997,7 @@ export class JsonSchemaGenerator {
         if (schemas.length === 1) {
             for (const k in schemas[0]) {
                 if (schemas[0].hasOwnProperty(k)) {
-                    definition[k] = schemas[0][k];
+                    (definition[k as keyof Definition] as any) = schemas[0][k as keyof Definition];
                 }
             }
         } else {
@@ -1035,7 +1035,7 @@ export class JsonSchemaGenerator {
             return !(
                 decls &&
                 decls.filter((decl) => {
-                    const mods = decl.modifiers;
+                    const mods = ts.canHaveModifiers(decl) ? ts.getModifiers(decl) : undefined;
                     return mods && mods.filter((mod) => mod.kind === ts.SyntaxKind.PrivateKeyword).length > 0;
                 }).length > 0
             );
@@ -1100,21 +1100,21 @@ export class JsonSchemaGenerator {
                 }
             }
 
-            const propertyDefinitions = props.reduce((all, prop) => {
+            const propertyDefinitions = props.reduce<ts.Symbol>((all, prop) => {
                 const propertyName = prop.getName();
                 const propDef = this.getDefinitionForProperty(prop, node);
                 if (propDef != null) {
-                    all[propertyName] = propDef;
+                    (all[propertyName as keyof ts.Symbol] as any) = propDef;
                 }
                 return all;
-            }, {});
+            }, {} as ts.Symbol);
 
             if (definition.type === undefined) {
                 definition.type = "object";
             }
 
             if (definition.type === "object" && Object.keys(propertyDefinitions).length > 0) {
-                definition.properties = propertyDefinitions;
+                (definition.properties as any) = propertyDefinitions;
             }
 
             if (this.args.defaultProps) {
@@ -1203,6 +1203,7 @@ export class JsonSchemaGenerator {
         pairedSymbol?: ts.Symbol,
         forceNotRef: boolean = false
     ): Definition {
+        console.log(typ.flags);
         const definition: Definition = {}; // real definition
 
         // Ignore any number of Readonly and Mutable type wrappings, since they only add and remove readonly modifiers on fields and JSON Schema is not concerned with mutability
@@ -1322,7 +1323,7 @@ export class JsonSchemaGenerator {
         }
 
         // Parse comments
-        const otherAnnotations = {};
+        const otherAnnotations:Record<string, boolean> = {};
         this.parseCommentsIntoDefinition(reffedType!, definition, otherAnnotations); // handle comments in the type alias declaration
         this.parseCommentsIntoDefinition(symbol!, definition, otherAnnotations);
         this.parseCommentsIntoDefinition(typ.aliasSymbol!, definition, otherAnnotations);
@@ -1410,12 +1411,12 @@ export class JsonSchemaGenerator {
             this.recursiveTypeRef.delete(fullTypeName);
             // If the type was recursive (there is reffedDefinitions) - lets replace it to reference
             if (this.reffedDefinitions[fullTypeName]) {
-                const annotations = Object.entries(returnedDefinition).reduce((acc, [key, value]) => {
-                    if (annotationKeywords[key] && typeof value !== undefined) {
-                        acc[key] = value;
+                const annotations = Object.entries(returnedDefinition).reduce<[string, any]>((acc, [key, value]) => {
+                    if (annotationKeywords[key as keyof typeof annotationKeywords] && typeof value !== undefined) {
+                        (acc[key as keyof typeof acc] as any) = value;
                     }
                     return acc;
-                }, {});
+                }, {} as [string, any]);
 
                 returnedDefinition = {
                     $ref: `${this.args.id}#/definitions/` + fullTypeName,
@@ -1463,7 +1464,7 @@ export class JsonSchemaGenerator {
     }
 
     public getSchemaForSymbols(symbolNames: string[], includeReffedDefinitions: boolean = true): Definition {
-        const root = {
+        const root:Record<string, any> = {
             $schema: "http://json-schema.org/draft-07/schema#",
             definitions: {},
         };
@@ -1572,7 +1573,7 @@ export function buildGenerator(
 
     for (const pref in args) {
         if (args.hasOwnProperty(pref)) {
-            settings[pref] = args[pref];
+            (settings[pref as keyof Args] as Args[keyof Args]) = args[pref as keyof PartialArgs] as Args[keyof Args];
         }
     }
 
